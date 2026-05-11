@@ -1,0 +1,151 @@
+# Independent EN/KO/FR SIREN language-bias / layer-rank experiment config
+# No translation is used. Each language is evaluated on its own datasets.
+
+experiment:
+  output_dir: outputs/lang_rank_exp
+  seed: 42
+  threshold: 0.5
+  batch_size: 16
+  device: cuda
+  dtype: bfloat16
+  max_length: 512
+  mode: text   # text | prompt_response
+
+data:
+  # Keep sample counts comparable across datasets/languages.
+  # Set null to use full datasets (not recommended for large HF datasets
+  # like civil_comments which has ~1.8M rows — the loader will apply a 10x
+  # buffer cap automatically when this is set).
+  default_max_samples_per_dataset: 1000
+
+# label: 1=unsafe/harmful/hateful/toxic/offensive, 0=safe/benign/neutral
+# The selected datasets intentionally avoid the common SIREN benchmark/training-family
+# datasets such as ToxicChat, OpenAIMod, Aegis/Aegis2, WildGuard, SafeRLHF, BeaverTails,
+# and the previously used Ko-WildGuard / Ko-PKU-SafeRLHF training data.
+datasets:
+  # -------------------------
+  # English independent sets
+  # -------------------------
+  - name: en_toxigen
+    lang: en
+    hf_id: toxigen/toxigen-data
+    split: train
+    text_field: generation
+    label_expr: toxigen_threshold
+    label_field: prompt_label
+    threshold: 0.5
+    meta_fields: [group, generation_method]
+
+  - name: en_civil_comments
+    lang: en
+    hf_id: google/civil_comments
+    split: train
+    text_field: text
+    label_field: toxicity
+    threshold: 0.5
+    meta_fields: [severe_toxicity, obscene, threat, insult, identity_attack, sexual_explicit]
+
+  - name: en_hatecheck
+    lang: en
+    hf_id: Paul/hatecheck
+    split: train
+    text_field: test_case
+    label_field: label_gold
+    unsafe_values: [hateful]
+    safe_values: [non-hateful]
+    meta_fields: [functionality, case_id]
+
+  # -------------------------
+  # Korean independent sets
+  # -------------------------
+  - name: ko_kmhas
+    lang: ko
+    hf_id: jeanlee/kmhas_korean_hate_speech
+    split: train
+    text_field: text
+    label_expr: kmhas_any_hate
+    label_field: label
+    safe_values: [8, "8", "Not Hate Speech", "not hate speech"]
+
+  - name: ko_kor_hate
+    lang: ko
+    hf_id: moon1ite/kor_hate
+    split: train
+    text_field: comments
+    label_field: hate
+    unsafe_values: [hate, offensive]
+    safe_values: [none]
+    meta_fields: [bias, contain_gender_bias]
+
+  - name: ko_kold
+    lang: ko
+    hf_id: nayohan/KOLD
+    split: train
+    text_field: comment
+    label_field: offensiveness
+    unsafe_values: [true, True, 1, "1"]
+    safe_values: [false, False, 0, "0"]
+    meta_fields: [source, title, target, target_group]
+
+  # -------------------------
+  # French independent sets
+  # -------------------------
+  - name: fr_mlma
+    lang: fr
+    hf_id: nedjmaou/MLMA_hate_speech
+    split: train
+    text_field: tweet
+    label_expr: mlma_normal_vs_rest
+    label_field: tweet sentiment
+    filters:
+      # IMPORTANT: verify whether this HF mirror returns French-only rows before
+      # commenting this out. MLMA covers multiple languages (Arabic, English, French).
+      # Run a quick check: load a few rows and inspect the 'language' column.
+      # If the dataset already returns only French rows for this split/config,
+      # this filter is a no-op and can be removed.
+      - field: language
+        equals: fr
+    meta_fields: [directness, target, group]
+
+  - name: fr_hatecheck
+    lang: fr
+    hf_id: Paul/hatecheck-french
+    split: train
+    text_field: test_case
+    label_field: label_gold
+    unsafe_values: [hateful]
+    safe_values: [non-hateful]
+    meta_fields: [functionality, case_id]
+
+  - name: fr_camer_hate_fr
+    lang: fr
+    # Download from Mendeley first:
+    # https://data.mendeley.com/datasets/rjwttgp23m/3
+    # Use the original French file, not the English translations.
+    path: data/camer_hate_fr_dataset.csv
+    text_field: Text
+    label_field: final_vote
+    unsafe_values: [haineux, hateful]
+    safe_values: [non_haineux, non-hateful, non_hateful]
+    meta_fields: [hateful_vote_count, non_hateful_vote_count]
+
+models:
+  - name: SIREN-Qwen3-4B-official
+    kind: hf_siren
+    repo_id: UofTCSSLab/SIREN-Qwen3-4B
+    base_model: Qwen/Qwen3-4B
+
+  - name: SIREN-Llama-3.1-8B-official
+    kind: hf_siren
+    repo_id: UofTCSSLab/SIREN-Llama-3.1-8B
+    base_model: meta-llama/Llama-3.1-8B
+
+  - name: Ko-SIREN-Qwen3-4B-local
+    kind: pkl_siren
+    pkl_path: /home/shadeform/siren/train/probes/optuna/qwen3-4b_ko_general/best_model.pkl
+    base_model: /home/shadeform/models/Qwen3-4B
+
+  - name: Ko-SIREN-Llama-3.1-8B-local
+    kind: pkl_siren
+    pkl_path: /home/shadeform/siren/train/probes/optuna/llama-3.1-8b_ko_general/best_model.pkl
+    base_model: /home/shadeform/models/Llama-3.1-8B
