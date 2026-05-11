@@ -288,8 +288,20 @@ def load_hf_siren_meta(repo_id: str, fallback_base_model: Optional[str] = None) 
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = json.load(f)
 
+    # The official SIREN artifact (UofTCSSLab/*) organises siren_config.json as:
+    #   {siren_version, siren_id, base_model, siren_module:{…}, mlp:{…}, inference:{…}, training:{…}}
+    #
+    # Selected neurons, layer weights, selected layers, and pooling_type live
+    # inside siren_module (and possibly inference).  Earlier code only tried to
+    # unfold "siren"/"classifier"/"model_config" and so always fell through,
+    # leaving merged == cfg top-level keys, which triggers the KeyError the user
+    # hit:
+    #   "Config keys=['siren_version','siren_id','base_model','siren_module',…]"
+    #
+    # Fix: unfold the known real nested sections first, then the legacy ones as
+    # a fallback so older unofficial artifacts continue to work.
     candidates = [cfg]
-    for key in ["siren", "classifier", "model_config"]:
+    for key in ["siren_module", "inference", "mlp", "siren", "classifier", "model_config"]:
         if isinstance(cfg.get(key), dict):
             candidates.append(cfg[key])
 
@@ -334,12 +346,25 @@ def load_hf_siren_meta(repo_id: str, fallback_base_model: Optional[str] = None) 
     if base_model is None:
         raise KeyError(
             f"Cannot find base model in {repo_id}/siren_config.json. "
-            f"Add base_model manually in configs/exp_lang_rank.yaml. Config keys={list(merged.keys())}"
+            f"Add base_model manually in configs/exp_lang_rank.yaml. "
+            f"Top-level keys={list(cfg.keys())}"
         )
     if not selected_neurons_dict or not layer_weights:
+        # Emit a structured diagnostic so future format changes are easy to debug.
+        def _summarize_cfg(d: Dict[str, Any]) -> Dict[str, Any]:
+            return {
+                k: (f"<dict keys={list(v.keys())[:8]}>" if isinstance(v, dict)
+                    else f"<list len={len(v)}>" if isinstance(v, list)
+                    else v)
+                for k, v in d.items()
+            }
         raise KeyError(
-            f"Cannot parse selected_neurons/layer_weights from {repo_id}/siren_config.json. "
-            f"Config keys={list(merged.keys())}"
+            f"Cannot parse selected_neurons/layer_weights from {repo_id}/siren_config.json.\n"
+            f"  Top-level keys : {list(cfg.keys())}\n"
+            f"  Merged keys    : {list(merged.keys())}\n"
+            f"  Top-level summary: {_summarize_cfg(cfg)}\n"
+            f"Hint: if the neurons/weights live under a different nested key, add it to "
+            f"the 'candidates' loop in load_hf_siren_meta()."
         )
     return SirenMeta(pooling_type, selected_neurons_dict, layer_weights, selected_layers, None), str(base_model)
 
