@@ -233,6 +233,54 @@ def _first_present(d: Dict[str, Any], keys: List[str], default: Any = None) -> A
     return default
 
 
+
+def _normalize_base_model_ref(base_model: Any, fallback_base_model: Optional[str] = None) -> str:
+    """Return a usable AutoModel.from_pretrained reference.
+
+    Official SIREN HF configs store base_model as either a string or a dict, e.g.
+      {"model_id": "Qwen/Qwen3-4B", "revision": "...", ...}
+    AutoModel.from_pretrained needs only the repo id/path string.  If the YAML
+    config provides `base_model`, prefer it because the user may want a local
+    backbone path instead of downloading from HF.
+    """
+    if fallback_base_model is not None and str(fallback_base_model).strip():
+        return str(fallback_base_model)
+
+    value = base_model
+    visited = set()
+    while isinstance(value, dict):
+        obj_id = id(value)
+        if obj_id in visited:
+            break
+        visited.add(obj_id)
+        next_value = None
+        for key in [
+            "model_id",
+            "repo_id",
+            "id",
+            "name",
+            "path",
+            "model_name_or_path",
+            "base_model_name_or_path",
+            "base_model_id",
+            "base_model_name",
+        ]:
+            if key in value and value[key] is not None:
+                next_value = value[key]
+                break
+        if next_value is None:
+            break
+        value = next_value
+
+    if isinstance(value, str) and value.strip():
+        return value
+
+    raise KeyError(
+        "Cannot convert base_model entry to a usable model id/path. "
+        f"base_model={base_model!r}. Add base_model manually in configs/exp_lang_rank.yaml."
+    )
+
+
 def _normalize_layer_weights(layer_weights: Any) -> Dict[int, float]:
     if layer_weights is None:
         return {}
@@ -330,7 +378,7 @@ def load_hf_siren_meta(repo_id: str, fallback_base_model: Optional[str] = None) 
     else:
         selected_layers = [int(x) for x in selected_layers_raw]
 
-    base_model = _first_present(
+    base_model_raw = _first_present(
         merged,
         [
             "base_model",
@@ -341,14 +389,15 @@ def load_hf_siren_meta(repo_id: str, fallback_base_model: Optional[str] = None) 
             "backbone_model",
             "model_path",
         ],
-        fallback_base_model,
+        None,
     )
-    if base_model is None:
+    if base_model_raw is None and fallback_base_model is None:
         raise KeyError(
             f"Cannot find base model in {repo_id}/siren_config.json. "
             f"Add base_model manually in configs/exp_lang_rank.yaml. "
             f"Top-level keys={list(cfg.keys())}"
         )
+    base_model = _normalize_base_model_ref(base_model_raw, fallback_base_model)
     if not selected_neurons_dict or not layer_weights:
         # Emit a structured diagnostic so future format changes are easy to debug.
         def _summarize_cfg(d: Dict[str, Any]) -> Dict[str, Any]:
