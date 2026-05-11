@@ -203,15 +203,33 @@ def compute_layer_tables(layer: pd.DataFrame, rank_metric: str = "abs_sum", eps:
     for model, g in lang_profile.groupby("model"):
         by_lang = {lang: lg.copy() for lang, lg in g.groupby("lang")}
         for base_lang in sorted(by_lang):
-            base = by_lang[base_lang][[
-                "layer_idx", "rank", metric_col, "mean_weighted_abs_sum", "mean_raw_abs_sum", "weighted_abs_share", "raw_abs_share"
-            ]].rename(columns={
-                "rank": "base_rank",
-                metric_col: "base_value",
-                "mean_weighted_abs_sum": "base_weighted_abs_sum",
-                "mean_raw_abs_sum": "base_raw_abs_sum",
-                "weighted_abs_share": "base_weighted_abs_share",
-                "raw_abs_share": "base_raw_abs_share",
+            # Build baseline columns explicitly instead of using rename().
+            #
+            # Why: when rank_metric == "abs_sum", metric_col is
+            # "mean_weighted_abs_sum". If we use a rename dict like
+            # {metric_col: "base_value", "mean_weighted_abs_sum":
+            # "base_weighted_abs_sum"}, the duplicate key collapses and
+            # "base_value" is never created, causing KeyError: 'base_value'.
+            base_src_cols = [
+                "layer_idx",
+                "rank",
+                metric_col,
+                "mean_weighted_abs_sum",
+                "mean_raw_abs_sum",
+                "weighted_abs_share",
+                "raw_abs_share",
+            ]
+            # Remove duplicates while preserving order.
+            base_src_cols = list(dict.fromkeys(base_src_cols))
+            base_src = by_lang[base_lang][base_src_cols].copy()
+            base = pd.DataFrame({
+                "layer_idx": base_src["layer_idx"],
+                "base_rank": base_src["rank"],
+                "base_value": base_src[metric_col],
+                "base_weighted_abs_sum": base_src["mean_weighted_abs_sum"],
+                "base_raw_abs_sum": base_src["mean_raw_abs_sum"],
+                "base_weighted_abs_share": base_src["weighted_abs_share"],
+                "base_raw_abs_share": base_src["raw_abs_share"],
             })
             for lang, lg in by_lang.items():
                 # Skip self-comparison: rank_delta=0, log_ratio=0 rows are noise.
