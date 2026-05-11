@@ -71,7 +71,9 @@ def normalize_label(row: Dict[str, Any], spec: Dict[str, Any]) -> Optional[int]:
         if expr == "mlma_normal_vs_rest":
             val = norm_scalar(get_value(row, spec.get("label_field", "tweet sentiment")))
             return 0 if val == "normal" else 1
-        if expr == "toxigen_threshold":
+        if expr in {"toxigen_threshold", "numeric_threshold"}:
+            # Generic numeric threshold: value >= threshold => unsafe(1), else safe(0).
+            # Works for ToxiGen toxicity_human/toxicity_ai and CivilComments toxicity.
             val = get_value(row, spec.get("label_field", "prompt_label"))
             try:
                 return 1 if float(val) >= float(spec.get("threshold", 0.5)) else 0
@@ -149,8 +151,22 @@ def _hf_load_bounded(hf_id: str, kwargs: Dict[str, Any], split: str, load_limit:
         return [dict(x) for x in dset]
     except Exception:
         pass
-    # Strategy 2: Streaming — works on all HF datasets.
-    dset = load_dataset(hf_id, **kwargs, split=split, streaming=True, trust_remote_code=True)
+    # Strategy 2: For local/packaged file loaders and script-based datasets, streaming can fail
+    # or trigger old dataset-script errors. Use non-streaming bounded iteration instead.
+    use_streaming = hf_id not in {
+        "csv",
+        "parquet",
+        "jeanlee/kmhas_korean_hate_speech",
+    }
+
+    dset = load_dataset(
+        hf_id,
+        **kwargs,
+        split=split,
+        streaming=use_streaming,
+        trust_remote_code=True,
+    )
+
     rows: List[Dict[str, Any]] = []
     for x in dset:
         rows.append(dict(x))
