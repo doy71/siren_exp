@@ -111,7 +111,7 @@ datasets:
 
   - name: fr_camer_hate_fr
     lang: fr
-    path: data/camer_hate_fr_dataset.csv
+    path: /home/shadeform/siren_exp/camer_hate_fr_dataset.csv
     text_field: Text
     label_field: final_vote
     unsafe_values: [haineux, hateful]
