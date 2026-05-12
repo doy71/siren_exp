@@ -12,16 +12,9 @@ experiment:
   mode: text   # text | prompt_response
 
 data:
-  # Keep sample counts comparable across datasets/languages.
-  # Set null to use full datasets (not recommended for large HF datasets
-  # like civil_comments which has ~1.8M rows — the loader will apply a 10x
-  # buffer cap automatically when this is set).
   default_max_samples_per_dataset: 1000
 
 # label: 1=unsafe/harmful/hateful/toxic/offensive, 0=safe/benign/neutral
-# The selected datasets intentionally avoid the common SIREN benchmark/training-family
-# datasets such as ToxicChat, OpenAIMod, Aegis/Aegis2, WildGuard, SafeRLHF, BeaverTails,
-# and the previously used Ko-WildGuard / Ko-PKU-SafeRLHF training data.
 datasets:
   # -------------------------
   # English independent sets
@@ -30,17 +23,18 @@ datasets:
     lang: en
     hf_id: toxigen/toxigen-data
     split: train
-    text_field: generation
+    text_field: text
     label_expr: toxigen_threshold
-    label_field: prompt_label
-    threshold: 0.5
-    meta_fields: [group, generation_method]
+    label_field: toxicity_human
+    threshold: 3.0
+    meta_fields: [target_group, factual?, ingroup_effect, lewd, framing, predicted_group, stereotyping, intent, toxicity_ai, predicted_author, actual_method]
 
   - name: en_civil_comments
     lang: en
     hf_id: google/civil_comments
     split: train
     text_field: text
+    label_expr: numeric_threshold
     label_field: toxicity
     threshold: 0.5
     meta_fields: [severe_toxicity, obscene, threat, insult, identity_attack, sexual_explicit]
@@ -73,8 +67,10 @@ datasets:
     split: train
     text_field: comments
     label_field: hate
-    unsafe_values: [hate, offensive]
-    safe_values: [none]
+    # moon1ite/kor_hate의 ClassLabel이 정수로 들어오는 경우까지 대응
+    # 0=hate, 1=offensive, 2=none 기준
+    unsafe_values: [0, 1, "0", "1", hate, offensive]
+    safe_values: [2, "2", none]
     meta_fields: [bias, contain_gender_bias]
 
   - name: ko_kold
@@ -82,10 +78,11 @@ datasets:
     hf_id: nayohan/KOLD
     split: train
     text_field: comment
-    label_field: offensiveness
+    # 중요: OFF는 PyYAML에서 false로 파싱될 수 있으므로 반드시 따옴표 필요
+    label_field: "OFF"
     unsafe_values: [true, True, 1, "1"]
     safe_values: [false, False, 0, "0"]
-    meta_fields: [source, title, target, target_group]
+    meta_fields: [source, title, TGT, GRP]
 
   # -------------------------
   # French independent sets
@@ -98,11 +95,6 @@ datasets:
     label_expr: mlma_normal_vs_rest
     label_field: tweet sentiment
     filters:
-      # IMPORTANT: verify whether this HF mirror returns French-only rows before
-      # commenting this out. MLMA covers multiple languages (Arabic, English, French).
-      # Run a quick check: load a few rows and inspect the 'language' column.
-      # If the dataset already returns only French rows for this split/config,
-      # this filter is a no-op and can be removed.
       - field: language
         equals: fr
     meta_fields: [directness, target, group]
@@ -119,9 +111,6 @@ datasets:
 
   - name: fr_camer_hate_fr
     lang: fr
-    # Download from Mendeley first:
-    # https://data.mendeley.com/datasets/rjwttgp23m/3
-    # Use the original French file, not the English translations.
     path: data/camer_hate_fr_dataset.csv
     text_field: Text
     label_field: final_vote
@@ -142,10 +131,10 @@ models:
 
   - name: Ko-SIREN-Qwen3-4B-local
     kind: pkl_siren
-    pkl_path: /home/shadeform/siren/train/probes/optuna/qwen3-4b_ko_general/best_model.pkl
-    base_model: /home/shadeform/models/Qwen3-4B
+    pkl_path: /home/shadeform/models/qwen3-4b_ko
+    base_model: Qwen/Qwen3-4B
 
   - name: Ko-SIREN-Llama-3.1-8B-local
     kind: pkl_siren
-    pkl_path: /home/shadeform/siren/train/probes/optuna/llama-3.1-8b_ko_general/best_model.pkl
-    base_model: /home/shadeform/models/Llama-3.1-8B
+    pkl_path: /home/shadeform/models/llama3.1-8b_ko
+    base_model: meta-llama/Llama-3.1-8B
