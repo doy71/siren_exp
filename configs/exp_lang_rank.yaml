@@ -27,7 +27,7 @@ datasets:
     label_expr: toxigen_threshold
     label_field: toxicity_human
     threshold: 3.0
-    meta_fields: [target_group, factual?, ingroup_effect, lewd, framing, predicted_group, stereotyping, intent, toxicity_ai, predicted_author, actual_method]
+    meta_fields: [target_group, "factual?", ingroup_effect, lewd, framing, predicted_group, stereotyping, intent, toxicity_ai, predicted_author, actual_method]
 
   - name: en_civil_comments
     lang: en
