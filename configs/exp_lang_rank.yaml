@@ -131,10 +131,10 @@ models:
 
   - name: Ko-SIREN-Qwen3-4B-local
     kind: pkl_siren
-    pkl_path: /home/shadeform/models/qwen3-4b_ko
+    pkl_path: /home/shadeform/models/qwen3-4b_ko/best_model.pkl
     base_model: Qwen/Qwen3-4B
 
   - name: Ko-SIREN-Llama-3.1-8B-local
     kind: pkl_siren
-    pkl_path: /home/shadeform/models/llama3.1-8b_ko
+    pkl_path: /home/shadeform/models/llama3.1-8b_ko/best_model.pkl
     base_model: meta-llama/Llama-3.1-8B
