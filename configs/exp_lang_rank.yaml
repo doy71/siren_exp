@@ -102,7 +102,7 @@ datasets:
   - name: fr_hatecheck
     lang: fr
     hf_id: Paul/hatecheck-french
-    split: train
+    split: test
     text_field: test_case
     label_field: label_gold
     unsafe_values: [hateful]
